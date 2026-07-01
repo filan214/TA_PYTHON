@@ -41,7 +41,7 @@ pytest -q
 | Tahap | Modul | Status |
 |---|---|---|
 | 1. Clean | `src/data/clean.py` | ✅ implemented + tests hijau |
-| 2. Aggregate (mingguan gerai×merek) | `src/data/aggregate.py` | ⬜ |
+| 2. Aggregate (mingguan gerai×merek) | `src/data/aggregate.py` | ✅ implemented + tests hijau |
 | 3. Google Trends (eksogen) | `src/data/google_trends.py` | ⬜ |
 | 4. EDA | `src/eda/explore.py` | ⬜ |
 | 5. Features | `src/features/build.py` | ⬜ |
