@@ -14,6 +14,16 @@ train_ratio: 0.8          # D3 -> 147 latih / 37 uji pada 184 minggu
 seasonal_period: 52       # D6 (mingguan tahunan)
 lags: 8                   # panjang lag/window default (L)
 rolling_windows: [4, 8]
+fourier_harmonics: 2      # K harmonik Fourier musiman m=52 -> sin/cos_1..K (D6)
+
+# --- Tahap 5: varian fitur (ablation Google Trends, D5) ---
+# Wildcard "*" = cocok-awalan terhadap kolom fitur nyata. Fourier di KEDUA varian
+# (bukan bagian ablation GT); hanya gt_index yang membedakan baseline vs gt.
+feature_variants:
+  baseline: ["lag_*", "roll_*", "weekofyear", "month", "is_ramadan",
+             "is_lebaran_window", "is_harbolnas", "year_trend", "fourier_*"]
+  gt:       ["lag_*", "roll_*", "weekofyear", "month", "is_ramadan",
+             "is_lebaran_window", "is_harbolnas", "year_trend", "fourier_*", "gt_index"]
 
 # --- Tahap 3: Google Trends (D5) ---
 trends_geo: ID

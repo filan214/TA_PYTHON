@@ -43,8 +43,8 @@ pytest -q
 | 1. Clean | `src/data/clean.py` | ✅ implemented + tests hijau |
 | 2. Aggregate (mingguan gerai×merek) | `src/data/aggregate.py` | ✅ implemented + tests hijau |
 | 3. Google Trends (eksogen) | `src/data/google_trends.py` | ✅ implemented + tests hijau |
-| 4. EDA | `src/eda/explore.py` | ⬜ |
-| 5. Features | `src/features/build.py` | ⬜ |
+| 4. EDA | `src/eda/explore.py` | ✅ implemented + tests hijau |
+| 5. Features (2 varian: baseline & gt) | `src/features/build.py` | ✅ implemented + tests hijau |
 | 6. Model (SARIMAX/RF/LSTM) | `src/models/` | ⬜ |
 | 7. Evaluasi + Diebold-Mariano | `src/evaluation/` | ⬜ |
 | 8. Optimasi inventori | `src/inventory/optimize.py` | ⬜ |
@@ -60,3 +60,8 @@ pytest -q
 - Google Trends (`geo=ID`) berhasil di-fetch & di-cache: **920 baris** (5 merek × 184 minggu),
   `gt_index ∈ [25,100]`, cakupan **100%** grid, tanpa NaN. Puncak minat pencarian jatuh di
   **minggu Lebaran** (2022-05-02, 2023-04-24) → mendukung rasional eksogen D5 (sinyal musiman).
+- EDA (Tahap 4): **17/20 deret stasioner** di level (ADF p<0.05) → `d_mode=0`; **3 non-stasioner**
+  (Toko_A/B×Realme, Toko_C×Vivo) → `d=1`. **Kekuatan musiman Fs<0.64 untuk SEMUA deret**
+  (rentang 0.36–0.59) → `D_mode=0`: musiman tahunan m=52 bersifat *lemah/spike-event*
+  (puncak minggu Lebaran & Harbolnas woy~44/48), bukan siklus halus. Perlu keputusan
+  penanganan musiman SARIMAX (lihat catatan D5/D6).

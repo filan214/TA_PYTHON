@@ -6,12 +6,23 @@
 
 ---
 
+## STATUS PROGRES (update terakhir)
+
+- ✅ **Tahap 1–4 SELESAI** (clean, aggregate, google_trends fetch+cache, EDA) — dijalankan sebelum revisi D5 di bawah. Artefak tahap ini **tetap valid**, tidak perlu diulang: cara data dibersihkan/diagregasi/di-fetch tidak berubah oleh revisi D5.
+- 📊 **Temuan aktual Tahap 4 (EDA):** seasonal strength lemah untuk seluruh 20 deret (Fs<0,64, m=52), dengan musiman terkonsentrasi di minggu-minggu event (Lebaran/Harbolnas) — bukan siklus tahunan halus. Temuan ini memicu **revisi D6** (lihat di bawah).
+- 🔄 **REVISI PADA RENCANA #1 (D5 + Tahap 5, 6, 7)**: Google Trends semula diperlakukan sebagai fitur eksogen wajib (langsung dipasang ke semua model). **Sekarang diubah menjadi ablation study**: tiap algoritma dilatih dalam dua varian — `baseline` (tanpa GT) dan `gt` (dengan GT) — supaya kontribusi GT diuji secara empiris (uji Diebold-Mariano), bukan diasumsikan. Lihat catatan lengkap di D5 (Bagian 2) dan Tahap 5–7 (Bagian 5) yang sudah direvisi.
+- 🔄 **REVISI PADA RENCANA #2 (D6 + Tahap 5, 6a)**: berdasarkan temuan Tahap 4 di atas, **orde musiman SARIMA(X) kini diputuskan per-deret secara data-driven via AIC** — TIDAK dipaksa non-nol di semua 20 deret. Tahap 5 menambahkan fitur **Fourier(m=52)** di samping fitur kalender yang sudah ada, agar sinyal musiman tetap tertangkap oleh RF & LSTM juga. Lihat catatan lengkap di D6 (Bagian 2) dan Tahap 5, 6a (Bagian 5) yang sudah direvisi.
+- ⏭️ **Sebelum lanjut ke Tahap 5**, verifikasi ulang artefak Tahap 1–4 masih sesuai kontrak (Bagian 1.2 & Tahap 2 DoD) — terutama karena Tahap 5 sekarang bergantung pada `data/interim/google_trends.csv` (Tahap 3) yang harus tetap dipakai apa adanya, tanpa fetch ulang.
+- ⏳ **Tahap 5–9 BELUM dikerjakan** — lanjutkan dari Tahap 5 dengan desain ablation GT (D5) dan seasonal data-driven (D6) yang baru.
+
+---
+
 ## 0. Ringkasan & Definisi of Done keseluruhan
 
 Bangun pipeline end-to-end yang, dari satu file CSV transaksi POS mentah + Google Trends, menghasilkan:
 
 1. Data mingguan bersih level **gerai × merek** (20 deret, 184 minggu).
-2. Tiga model peramalan terlatih (**SARIMAX, Random Forest, LSTM**) dengan evaluasi komparatif.
+2. Tiga model peramalan terlatih (**SARIMA/SARIMAX, Random Forest, LSTM**), masing-masing dalam dua varian — **baseline** dan **+Google Trends** — dengan evaluasi komparatif antar-algoritma sekaligus ablation study kontribusi Google Trends (lihat D5, Bagian 2).
 3. Uji signifikansi **Diebold-Mariano** antar-model.
 4. Parameter optimasi inventori (**safety stock, reorder point, order-up-to level**) dari model terbaik.
 5. Purwarupa **DSS dashboard (Streamlit)** untuk 4 pemilik gerai.
@@ -81,10 +92,17 @@ Setelah mapping, tidak boleh ada 'Other'. Tambahkan assert.
 | D2 | **Granularitas waktu = mingguan** (resample `W`) | Selaras siklus keputusan pengadaan; harian terlalu sparse |
 | D3 | **Split temporal 80:20** = 147 minggu latih / 37 uji, tanpa shuffle | Meniru peramalan ke depan; cegah leakage |
 | D4 | **Cross-validation = `TimeSeriesSplit`** (expanding window) | Standar deret waktu; train selalu mendahului val |
-| D5 | **Google Trends `geo='ID'`** sebagai eksogen; SARIMA → **SARIMAX** | Penajam sinyal musiman (Lebaran/Harbolnas) |
-| D6 | **Periode musiman s = 52** (mingguan tahunan) | Data menunjukkan tren tahunan yang jelas |
+| D5 | **Google Trends `geo='ID'`** diuji sebagai **ablation study** (baseline vs +GT per algoritma), BUKAN diasumsikan otomatis membantu | Data toko riil berskala hyper-lokal (rata-rata 1–2 unit/minggu per deret); ada *scale mismatch* dgn sinyal pencarian nasional. Manfaat GT harus dibuktikan empiris pada data ini, bukan diasumsikan dari literatur berskala nasional/agregat (lih. catatan D5 di bawah & ref [21] Sutisna dkk.) |
+| D6 | **Periode musiman s = 52** (mingguan tahunan) tetap jadi parameter kontrak, TAPI **orde musiman (P,D,Q) diputuskan per-deret secara data-driven** (AIC/validasi), bukan dipaksa non-nol di semua deret | EDA (Tahap 4) menunjukkan seasonal strength lemah (Fs<0,64 untuk seluruh 20 deret) dan musiman terkonsentrasi di minggu-minggu event (Lebaran/Harbolnas) — bukan pola musiman halus berulang. Memaksa (P,D,Q) non-nol pada semua deret berisiko tinggi non-konvergen (lih. §9) dan salah spesifikasi. |
 | D7 | **Metrik = MAPE, RMSE, MAE**; target MAPE < 15%; uji **Diebold-Mariano** | Sesuai Bab II/III |
 | D8 | **Safety stock berbasis σ galat peramalan** (bukan σ permintaan historis) | Pendekatan Prak dkk. [23] di Bab II |
+
+**Catatan D6 — kenapa data-driven per-deret, bukan dipaksa (ditambahkan setelah Tahap 4 EDA aktual):** Hasil EDA riil menunjukkan seasonal strength (Fs) di bawah 0,64 untuk seluruh 20 deret gerai×merek, dengan komponen musiman yang jelas justru terkonsentrasi sempit di sekitar Lebaran dan Harbolnas (11.11/12.12), bukan berupa siklus tahunan yang halus dan berulang. Karakteristik ini secara statistik lebih cocok ditangkap lewat **fitur eksogen** (dummy kalender + Fourier) daripada lewat suku ARIMA musiman (P,D,Q)₅₂ yang didesain untuk autokorelasi musiman yang mulus — apalagi dengan hanya 147 titik latih (~2,8 siklus tahunan), estimasi suku musiman penuh rawan tidak stabil/non-konvergen (persis risiko yang sudah dicatat di Bagian 9). Karena itu:
+- `s = 52` tetap menjadi parameter periodisitas yang tersedia untuk pencarian orde (tidak dihapus dari kontrak), tetapi (P,D,Q) musiman **tidak dipaksa non-nol** — dipilih AIC per deret di Tahap 6a, sehingga sebagian deret bisa saja berakhir non-seasonal jika itu yang terbaik.
+- **Tahap 5 menambahkan fitur Fourier(m=52)** (pasangan sin/cos) di samping fitur kalender (`is_ramadan`, `is_lebaran_window`, `is_harbolnas`) yang sudah ada, agar sinyal musiman tetap tertangkap oleh **ketiga algoritma** (termasuk RF dan LSTM yang tidak punya struktur ARIMA musiman bawaan), bukan hanya oleh SARIMAX.
+- Pendekatan ini konsisten dengan filosofi D5 (Google Trends): keputusan struktural diuji secara empiris per deret, bukan diasumsikan dari awal.
+
+**Catatan D5 — kenapa ablation, bukan asumsi:** Google Trends `geo='ID'` mengukur minat pencarian **tingkat nasional**, sedangkan unit analisis penelitian ini adalah **penjualan toko fisik individual** dengan volume sangat kecil (~1–2 unit/minggu per deret gerai×merek). Rantai kausal dari "minat pencarian nasional naik" ke "satu toko lokal terjual lebih banyak minggu ini" panjang dan tidak otomatis berlaku — berbeda dari studi rujukan di Bab II (Choi & Varian [11], Sutisna dkk. [21]) yang seluruhnya menggunakan data **agregat nasional**, bukan satu unit usaha kecil. Karena itu, GT diperlakukan sebagai **hipotesis yang diuji secara empiris** (baseline vs +GT untuk tiap algoritma, lihat Tahap 5–7), bukan fitur yang dipasang begitu saja dengan asumsi pasti membantu. Ini juga menjaga konsistensi dengan judul skripsi saat ini, yang tidak lagi menempatkan Google Trends sebagai klaim utama penelitian.
 
 **Catatan intermittency:** meski di level gerai×merek jauh lebih sehat, tetap ada minggu nol. Untuk model, minggu nol adalah nilai valid (0 unit), bukan missing. Jangan diinterpolasi.
 
@@ -235,22 +253,30 @@ Setiap tahap: **Objective → Input → Output → Steps → Definition of Done 
 
 ### Tahap 5 — `src/features/build.py` (Bab III §3.1.5 rekayasa fitur)
 
-**Objective:** ubah tiap deret jadi matriks supervised untuk RF & LSTM; siapkan eksogen untuk SARIMAX.
-**Output:** `data/processed/features_<store>_<brand>.parquet` (atau satu file panel dengan index multi).
+**Objective:** ubah tiap deret jadi matriks supervised untuk RF & LSTM; siapkan dua **varian fitur** per deret — `baseline` (tanpa Google Trends) dan `gt` (dengan Google Trends) — agar kontribusi GT bisa diuji sebagai ablation study (lihat D5).
+**Output:** `data/processed/features_<store>_<brand>.parquet` (satu file berisi seluruh kolom, termasuk `gt_index`; pemilihan varian dilakukan saat training via daftar kolom, bukan file terpisah).
 
 **Fitur (per baris minggu t, per deret):**
 - Target: `units[t]`.
 - **Lag**: `units[t-1..t-L]`, default L=8 (config).
 - **Rolling**: `roll_mean_4`, `roll_std_4`, `roll_mean_8`.
 - **Kalender**: `weekofyear`, `month`, `is_ramadan`, `is_lebaran_window`, `is_harbolnas` (11.11/12.12/Nov-Des), `year_trend` (indeks minggu berurutan untuk tren).
-- **Eksogen**: `gt_index[t]` (dan opsional `gt_index[t-1]`).
-- Scaling: **MinMax**, di-`fit` **hanya pada train** (simpan scaler per deret ke `models/scalers/`). Untuk RF sebenarnya scaling opsional; untuk LSTM wajib.
+- **Fourier musiman** *(baru — lih. D6)*: `fourier_sin_1`, `fourier_cos_1` (dan opsional harmonik ke-2: `fourier_sin_2`, `fourier_cos_2`) dengan periode m=52, dihitung dari indeks minggu berurutan. Fitur ini menyuntikkan sinyal periodisitas tahunan yang halus ke **RF dan LSTM** (yang tidak punya struktur ARIMA musiman bawaan), melengkapi dummy kalender yang menangkap lonjakan tajam di minggu-minggu event. Fitur ini ada di **kedua varian** (`baseline` maupun `gt`) — bukan bagian dari ablation GT.
+- **Eksogen (khusus varian `gt`)**: `gt_index[t]` (dan opsional `gt_index[t-1]`). Kolom ini tetap dihitung & disimpan untuk semua deret, tapi **hanya dipakai** saat melatih varian `gt` — varian `baseline` mengecualikan kolom ini sepenuhnya (bukan di-nol-kan, karena akan mengubah struktur data untuk model non-pohon seperti LSTM).
+- Scaling: **MinMax**, di-`fit` **hanya pada train** (simpan scaler per deret **per varian** ke `models/scalers/<variant>/`). Untuk RF sebenarnya scaling opsional; untuk LSTM wajib.
 
-**Penting anti-leakage:** semua fitur lag/rolling dihitung dari masa lalu saja. `fit` scaler & imputasi statistik hanya dari partisi train (147 minggu pertama).
+**Definisikan daftar kolom fitur secara eksplisit** di `config.yaml`:
+```yaml
+feature_variants:
+  baseline: [lag_*, roll_*, weekofyear, month, is_ramadan, is_lebaran_window, is_harbolnas, year_trend, fourier_sin_1, fourier_cos_1]
+  gt:       [lag_*, roll_*, weekofyear, month, is_ramadan, is_lebaran_window, is_harbolnas, year_trend, fourier_sin_1, fourier_cos_1, gt_index]
+```
+
+**Penting anti-leakage:** semua fitur lag/rolling dihitung dari masa lalu saja. `fit` scaler & imputasi statistik hanya dari partisi train (147 minggu pertama), dilakukan terpisah untuk tiap varian.
 
 **DoD:**
 - Tak ada baris dengan lag NaN yang bocor ke train/test (baris awal ber-NaN di-drop konsisten).
-- Fungsi `make_supervised(series_df, cfg) -> (X, y, index)` ada + unit test bentuk output.
+- Fungsi `make_supervised(series_df, cfg, variant='baseline'|'gt') -> (X, y, index)` ada + unit test bentuk output untuk **kedua varian** (assert kolom `gt_index` ada di varian `gt` dan tidak ada di `baseline`).
 
 ### Tahap 6 — Model (Bab III §3.1.6)
 
@@ -263,48 +289,54 @@ class Forecaster(ABC):
     def name(self) -> str: ...
 ```
 
-Latih **per deret store×brand** (20 model per algoritma) ATAU global dengan dummy deret — default **per deret** (lebih sederhana & sesuai naskah). Simpan artefak ke `models/<algo>/<store>_<brand>.*`.
+Latih **per deret store×brand, per varian fitur** (20 deret × 2 varian = 40 model per algoritma) — default **per deret** (lebih sederhana & sesuai naskah). Simpan artefak ke `models/<algo>/<variant>/<store>_<brand>.*`.
 
 **6a — `sarimax.py`:**
-- Orde via `pmdarima.auto_arima` (seasonal=True, m=52) ATAU grid manual dipandu ACF/PACF dari Tahap 4.
-- `gt_index` sebagai `exog`.
-- Simpan orde terpilih per deret ke `reports/results/sarima_orders.csv`.
-- **Gotcha:** m=52 pada statsmodels bisa lambat/berat. Jika tak konvergen, izinkan fallback ke SARIMA non-seasonal + fitur kalender, dan catat di log.
+- Orde via `pmdarima.auto_arima` (`seasonal=True`, `m=52`, `stepwise=True`) per deret, dipandu batas awal `d`/`D` dari `eda_summary.json` (Tahap 4) dan ACF/PACF. **Seasonal order (P,D,Q) TIDAK dipaksa non-nol** — biarkan `auto_arima` memilih via AIC, termasuk kemungkinan (0,0,0)₅₂ jika itu yang terbaik untuk deret tertentu (lih. D6). Ini keputusan data-driven per deret, bukan penyeragaman di awal.
+- Varian `baseline` = **SARIMA** dengan Fourier+kalender sebagai `exog` (tanpa `gt_index`); varian `gt` = **SARIMAX** dengan Fourier+kalender+`gt_index` sebagai `exog`. Jadi kedua varian tetap punya exog — bedanya murni ada/tidaknya `gt_index`, agar perbandingan ablation benar-benar isolasi efek GT saja. Cari orde ARIMA terpisah untuk tiap varian (exog yang berbeda bisa mengubah orde optimal) — dokumentasikan kedua orde per deret.
+- Simpan orde terpilih (termasuk kasus seasonal order = 0) per deret **per varian** ke `reports/results/sarima_orders.csv`, dengan kolom tambahan `has_seasonal_terms` (bool) untuk memudahkan pelaporan di Bab IV — mis. "X dari 20 deret memilih orde musiman non-nol".
+- **Gotcha (termudahkan oleh D6):** karena seasonal order kini data-driven, risiko non-konvergen m=52 berkurang signifikan (deret dengan sinyal musiman lemah akan otomatis memilih orde rendah/nol). Tetap sediakan fallback ke non-seasonal jika `auto_arima` tetap gagal konvergen pada rentang orde manapun, dan catat di log.
 
 **6b — `random_forest.py`:**
 - `RandomForestRegressor`; `GridSearchCV` dgn `cv=TimeSeriesSplit(n_splits=5)`.
 - Grid awal: `n_estimators∈{200,500}`, `max_depth∈{None,10,20}`, `max_features∈{'sqrt',0.5}`, `min_samples_leaf∈{1,2}`.
-- Simpan `feature_importances_` → `reports/figures/rf_importance_<series>.png`.
+- Latih dua kali per deret: fitur `baseline` dan fitur `gt` (lihat Tahap 5).
+- Simpan `feature_importances_` → `reports/figures/rf_importance_<series>_<variant>.png`. Untuk varian `gt`, ini juga menjawab langsung seberapa penting `gt_index` relatif terhadap fitur lain.
 
 **6c — `lstm.py`:**
 - Input sekuens sliding window (window=L dari config).
 - Arsitektur awal: `LSTM(64) → Dropout(0.2) → Dense(1)`; loss=MSE, opt=Adam, `EarlyStopping(patience=10, restore_best_weights=True)`, `validation_split` temporal (bukan acak).
+- Varian `baseline`: sekuens tanpa kanal `gt_index`. Varian `gt`: kanal `gt_index` ditambahkan sebagai fitur tambahan per timestep. Arsitektur (jumlah unit/lapisan) **dibuat identik** antar-varian agar selisih performa murni berasal dari ada/tidaknya GT, bukan dari kapasitas model yang berbeda.
 - Set seed (`tf`, `np`, `random`) untuk reproducibility.
-- Simpan `.keras` + scaler.
+- Simpan `.keras` + scaler per varian.
 
 **DoD (semua model):**
-- Fungsi `train_all(algo, cfg)` menghasilkan 20 artefak per algoritma tanpa error (atau log fallback jelas untuk deret bermasalah).
-- Prediksi horizon uji (37 minggu) tersedia untuk tiap deret → `reports/results/predictions_<algo>.parquet`.
+- Fungsi `train_all(algo, variant, cfg)` menghasilkan 20 artefak per (algoritma, varian) tanpa error (atau log fallback jelas untuk deret bermasalah) → total 40 artefak per algoritma, 120 total.
+- Prediksi horizon uji (37 minggu) tersedia untuk tiap deret × varian → `reports/results/predictions_<algo>_<variant>.parquet`.
 
-### Tahap 7 — Evaluasi & Diebold-Mariano (Bab III §3.1.7)
+### Tahap 7 — Evaluasi, Diebold-Mariano, dan Ablation Study Google Trends (Bab III §3.1.7)
 
-**`metrics.py`:** implement MAPE (aman untuk aktual 0 → gunakan sMAPE atau MAPE dengan epsilon, dokumentasikan pilihan; **catatan:** deret ini punya minggu nol, jadi MAPE murni bisa meledak — pakai **sMAPE** sebagai pendamping dan laporkan keduanya), RMSE, MAE. Agregasi: per deret, lalu rata-rata (mean & weighted-by-volume) per algoritma.
+**`metrics.py`:** implement MAPE (aman untuk aktual 0 → gunakan sMAPE atau MAPE dengan epsilon, dokumentasikan pilihan; **catatan:** deret ini punya minggu nol, jadi MAPE murni bisa meledak — pakai **sMAPE** sebagai pendamping dan laporkan keduanya), RMSE, MAE. Agregasi: per deret, lalu rata-rata (mean & weighted-by-volume) per (algoritma, varian).
 
-**`diebold_mariano.py`:** implement uji DM (loss=squared error, horizon=1 atau multi; two-sided). Bandingkan pasangan: SARIMAX vs RF, SARIMAX vs LSTM, RF vs LSTM — per deret dan/atau atas galat gabungan. Output p-value + arah.
+**`diebold_mariano.py`:** implement uji DM (loss=squared error, horizon=1 atau multi; two-sided). Dua kelompok perbandingan:
+1. **Antar-algoritma** (pada varian terbaik masing-masing, biasanya `gt` jika terbukti membantu, atau `baseline` jika tidak): SARIMAX vs RF, SARIMAX vs LSTM, RF vs LSTM.
+2. **Ablation per algoritma** (baseline vs gt, algoritma yang sama): SARIMA vs SARIMAX, RF-baseline vs RF-gt, LSTM-baseline vs LSTM-gt — ini yang **langsung menjawab pertanyaan "apakah Google Trends terbukti membantu di data toko riil ini"**, per algoritma, dengan p-value, bukan asumsi.
 
 **Output:**
-- `reports/results/metrics_summary.csv` — baris=algoritma, kolom=MAPE/sMAPE/RMSE/MAE (mean & weighted).
-- `reports/results/dm_tests.csv` — pasangan, statistik DM, p-value, kesimpulan (α=0.05).
-- `reports/figures/actual_vs_pred_<series>.png` untuk beberapa deret.
+- `reports/results/metrics_summary.csv` — baris=(algoritma, varian), kolom=MAPE/sMAPE/RMSE/MAE (mean & weighted).
+- `reports/results/dm_tests.csv` — pasangan, statistik DM, p-value, kesimpulan (α=0.05); mencakup kedua kelompok perbandingan di atas.
+- `reports/results/gt_ablation_comparison.csv` — per (algoritma, deret): MAPE_baseline, MAPE_gt, Δ (%), apakah GT membantu (ya/tidak) berdasarkan uji DM ablation; plus baris ringkasan: jumlah deret yang membaik vs memburuk vs tak signifikan per algoritma.
+- `reports/figures/actual_vs_pred_<series>_<variant>.png` untuk beberapa deret.
 
 **DoD:**
-- Tabel metrik lengkap 3 algoritma × 20 deret + ringkasan.
-- Uji DM menghasilkan p-value valid; kesimpulan model terbaik ter-derive otomatis (algoritma dgn error terendah yang signifikan).
+- Tabel metrik lengkap 3 algoritma × 2 varian × 20 deret + ringkasan.
+- Uji DM menghasilkan p-value valid untuk kedua kelompok perbandingan; kesimpulan model terbaik ter-derive otomatis (algoritma+varian dgn error terendah yang signifikan).
+- `gt_ablation_comparison.csv` memberi jawaban eksplisit dan berbasis-bukti terhadap pertanyaan "apakah GT bermanfaat di skala data toko riil ini" — siap dikutip langsung di pembahasan Bab IV.
 
 ### Tahap 8 — Optimasi Inventori (Bab III §3.1.8)
 
 **`inventory/optimize.py`:**
-- Ambil **model terbaik** (dari Tahap 7) → galat peramalan pada test.
+- Ambil **model terbaik** — yaitu kombinasi (algoritma, varian) dengan error terendah yang signifikan secara statistik dari Tahap 7, bisa jadi `baseline` atau `gt` tergantung hasil ablation — → galat peramalan pada test.
 - `safety_stock = z * σ_forecast_error * sqrt(lead_time_weeks)` — `z` dari `service_level` (config, default 95% → z≈1.645), `lead_time_weeks` (config, default 1–2).
 - `reorder_point = mean_demand_lead_time + safety_stock`.
 - `order_up_to_level = reorder_point + review_period_demand` (order-up-to, sesuai [16]).
@@ -349,7 +381,7 @@ python -m src.run_all --config config.yaml [--no-trends] [--from-stage N] [--to-
 
 - `test_clean.py` — semua assertion Bagian 1.2.
 - `test_aggregate.py` — 3.680 baris, no-NaN, zero-week mean ≤ 0.30, sum units konsisten.
-- `test_features.py` — no leakage (scaler fit hanya train), bentuk X/y benar, tak ada lag-NaN di train/test.
+- `test_features.py` — no leakage (scaler fit hanya train), bentuk X/y benar untuk **kedua varian** (`baseline` & `gt`), tak ada lag-NaN di train/test, assert `gt_index` absen di varian `baseline`.
 - `test_splits.py` — 147/37, train.max_date < test.min_date.
 - `test_metrics.py` — MAPE/RMSE/MAE benar pada contoh manual; sMAPE aman saat aktual 0.
 - `test_dm.py` — DM pada dua deret identik → p-value ~1 (tak beda).
@@ -361,15 +393,15 @@ Target: `pytest -q` hijau sebelum tahap dianggap selesai.
 
 ## 8. Urutan Kerja untuk Claude Code (checklist eksekusi)
 
-1. [ ] Scaffold struktur folder + `requirements.txt` + `config.yaml` + `README.md`.
-2. [ ] Salin `pos_transactions_raw.csv` ke `data/raw/`.
-3. [ ] Tahap 1 (clean) + test → hijau.
-4. [ ] Tahap 2 (aggregate) + test → hijau, **verifikasi zero-week ≤ 0.30**.
-5. [ ] Tahap 3 (google trends) + cache + fallback.
-6. [ ] Tahap 4 (EDA) → figures + ADF summary.
-7. [ ] Tahap 5 (features) + test anti-leakage.
-8. [ ] Tahap 6a/6b/6c (model) → 20 artefak/algoritma + prediksi test.
-9. [ ] Tahap 7 (metrics + DM) → tabel hasil + tentukan model terbaik.
+1. [x] Scaffold struktur folder + `requirements.txt` + `config.yaml` + `README.md`.
+2. [x] Salin `pos_transactions_raw.csv` ke `data/raw/`.
+3. [x] Tahap 1 (clean) + test → hijau.
+4. [x] Tahap 2 (aggregate) + test → hijau, **verifikasi zero-week ≤ 0.30**.
+5. [x] Tahap 3 (google trends) + cache + fallback.
+6. [x] Tahap 4 (EDA) → figures + ADF summary.
+7. [ ] Tahap 5 (features, **2 varian: baseline & gt**) + test anti-leakage untuk kedua varian.
+8. [ ] Tahap 6a/6b/6c (model, **2 varian × 20 deret = 40 artefak/algoritma**) → prediksi test kedua varian.
+9. [ ] Tahap 7 (metrics + DM antar-algoritma + **DM ablation baseline-vs-gt**) → `gt_ablation_comparison.csv` + tentukan model terbaik.
 10. [ ] Tahap 8 (inventory) → params + cost impact.
 11. [ ] Tahap 9 (Streamlit DSS).
 12. [ ] `src/run_all.py` end-to-end + `README` cara menjalankan.
@@ -380,9 +412,10 @@ Target: `pytest -q` hijau sebelum tahap dianggap selesai.
 ## 9. Gotchas & Risiko (dari data riil — perhatikan!)
 
 - **MAPE meledak pada minggu nol.** Deret gerai×merek masih punya ~26% minggu nol. MAPE murni → pembagian nol. **Wajib** laporkan sMAPE + MAE/RMSE; jangan andalkan MAPE tunggal untuk deret bernilai nol.
-- **SARIMAX m=52 berat/lambat & rentan non-konvergen** pada 147 titik train. Siapkan fallback (non-seasonal + fitur kalender) dan catat per deret.
+- **SARIMAX m=52 berat/lambat & rentan non-konvergen** pada 147 titik train — risiko ini **sebagian besar dimitigasi oleh D6** (orde musiman data-driven per deret via AIC, tidak dipaksa non-nol). Tetap siapkan fallback non-seasonal untuk kasus `auto_arima` gagal konvergen di semua kandidat orde, dan catat per deret di `sarima_orders.csv`.
 - **Data train pendek untuk LSTM** (147 minggu). Jaga model kecil (1 lapisan, unit sedikit), pakai EarlyStopping & Dropout; jangan over-parametrize. Ini sekaligus temuan menarik untuk pembahasan (deep learning belum tentu menang pada data terbatas — konsisten dgn ref [21] Sutisna dkk. di Bab II).
 - **pytrends tak stabil** → cache wajib + fallback `--no-trends`.
+- **Google Trends kini ablation study, bukan fitur wajib** (lih. D5). Ini menggandakan jumlah model terlatih (40 vs 20 per algoritma) — pastikan waktu komputasi masih wajar untuk skala data ini (147 titik train, model ringan); jika terlalu lambat, prioritaskan SARIMA/SARIMAX dulu (paling cepat) sebelum RF/LSTM. **Jangan** melaporkan GT sebagai "terbukti membantu" tanpa didukung `gt_ablation_comparison.csv` dan uji DM ablation yang signifikan.
 - **Beberapa SKU lifecycle pendek** — tapi karena agregasi ke merek, efeknya teredam. Jangan kembali ke per-SKU tanpa menangani intermittency (mis. Croston) — di luar scope naskah saat ini.
 - **`sales_no` bukan primary key** — jangan pakai untuk dedup; pakai `drop_duplicates()` baris penuh.
 - **Reproducibility**: seed semua (`numpy`, `random`, `tensorflow`), dan `PYTHONHASHSEED`.
@@ -392,7 +425,7 @@ Target: `pytest -q` hijau sebelum tahap dianggap selesai.
 ## 10. Deliverables akhir (yang harus ada saat selesai)
 
 - Repo lengkap sesuai struktur Bagian 3.
-- `reports/results/`: `metrics_summary.csv`, `dm_tests.csv`, `inventory_params.csv`, `cost_impact.csv`, `sarima_orders.csv`.
+- `reports/results/`: `metrics_summary.csv`, `dm_tests.csv`, `gt_ablation_comparison.csv`, `inventory_params.csv`, `cost_impact.csv`, `sarima_orders.csv`.
 - `reports/figures/`: series grid, ACF/PACF, decompose, actual-vs-pred, RF importance.
 - `models/`: artefak terlatih + scaler.
 - `app/dashboard.py`: DSS berjalan.
