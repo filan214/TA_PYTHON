@@ -1,0 +1,15 @@
+# Bab III — Tabel 3.2 (pin versi minor). Python >= 3.10
+pandas>=2.0
+numpy>=1.24
+statsmodels>=0.14        # SARIMAX, ADF, ACF/PACF, seasonal_decompose
+scikit-learn>=1.3        # RandomForest, MinMaxScaler, TimeSeriesSplit, GridSearchCV
+tensorflow>=2.13         # LSTM (keras)
+pmdarima>=2.0            # auto_arima untuk orde SARIMA awal (opsional)
+matplotlib>=3.7
+seaborn>=0.12
+pytrends>=4.9            # Google Trends (unofficial API)
+streamlit>=1.28
+pyyaml>=6.0
+pytest>=7.4
+joblib>=1.3
+pyarrow>=12.0            # backend parquet untuk artefak interim/processed
