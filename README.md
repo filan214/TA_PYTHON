@@ -42,7 +42,7 @@ pytest -q
 |---|---|---|
 | 1. Clean | `src/data/clean.py` | ✅ implemented + tests hijau |
 | 2. Aggregate (mingguan gerai×merek) | `src/data/aggregate.py` | ✅ implemented + tests hijau |
-| 3. Google Trends (eksogen) | `src/data/google_trends.py` | ⬜ |
+| 3. Google Trends (eksogen) | `src/data/google_trends.py` | ✅ implemented + tests hijau |
 | 4. EDA | `src/eda/explore.py` | ⬜ |
 | 5. Features | `src/features/build.py` | ⬜ |
 | 6. Model (SARIMAX/RF/LSTM) | `src/models/` | ⬜ |
@@ -57,3 +57,6 @@ pytest -q
 - Grid mingguan penuh = **184 minggu**; 1 minggu (2022-05-02..05-08) nol penjualan di
   semua gerai — **libur Lebaran 2022**, nilai nol yang valid (bukan data hilang).
 - Fraksi minggu-nol level gerai×merek = **0.258 ≤ 0.30** → memvalidasi keputusan D1.
+- Google Trends (`geo=ID`) berhasil di-fetch & di-cache: **920 baris** (5 merek × 184 minggu),
+  `gt_index ∈ [25,100]`, cakupan **100%** grid, tanpa NaN. Puncak minat pencarian jatuh di
+  **minggu Lebaran** (2022-05-02, 2023-04-24) → mendukung rasional eksogen D5 (sinyal musiman).
