@@ -13,8 +13,8 @@
 - 🔄 **REVISI PADA RENCANA #1 (D5 + Tahap 5, 6, 7)**: Google Trends semula diperlakukan sebagai fitur eksogen wajib (langsung dipasang ke semua model). **Sekarang diubah menjadi ablation study**: tiap algoritma dilatih dalam dua varian — `baseline` (tanpa GT) dan `gt` (dengan GT) — supaya kontribusi GT diuji secara empiris (uji Diebold-Mariano), bukan diasumsikan. Lihat catatan lengkap di D5 (Bagian 2) dan Tahap 5–7 (Bagian 5) yang sudah direvisi.
 - 🔄 **REVISI PADA RENCANA #2 (D6 + Tahap 5, 6a)**: berdasarkan temuan Tahap 4 di atas, **orde musiman SARIMA(X) kini diputuskan per-deret secara data-driven via AIC** — TIDAK dipaksa non-nol di semua 20 deret. Tahap 5 menambahkan fitur **Fourier(m=52)** di samping fitur kalender yang sudah ada, agar sinyal musiman tetap tertangkap oleh RF & LSTM juga. Lihat catatan lengkap di D6 (Bagian 2) dan Tahap 5, 6a (Bagian 5) yang sudah direvisi.
 - 🔄 **REVISI PADA RENCANA #3 (D9 + Tahap 6, 7, 8)**: ditemukan saat implementasi Tahap 6a bahwa RF/LSTM alami *one-step-ahead* sedangkan SARIMAX default ke *fixed-origin* 37-langkah — asimetri ini merusak validitas uji DM (Tahap 7) dan formula *safety stock* (Tahap 8), bukan cuma soal keadilan. **Diputuskan: ketiga algoritma dievaluasi dengan one-step-ahead walk-forward yang identik** (SARIMAX via update state `append()`/`apply()`, orde tetap dari Tahap 6a, tanpa re-fit tiap langkah). Lihat catatan lengkap di D9 (Bagian 2) dan Tahap 6/7/8 (Bagian 5) yang sudah direvisi.
-- ⏭️ **Posisi saat ini: Tahap 6b (Random Forest).** Tahap 5 (kedua varian fitur) dan Tahap 6a (SARIMAX, dgn rezim walk-forward D9) sudah selesai. Pastikan 6b dan 6c mengikuti rezim evaluasi one-step-ahead walk-forward yang sama (D9) — keduanya sudah alami one-step-ahead by design, tapi verifikasi implementasinya tidak diam-diam berubah jadi rekursif/multi-step.
-- ⏳ **Tahap 6c–9 BELUM dikerjakan** — lanjutkan dengan desain ablation GT (D5), seasonal data-driven (D6), dan rezim evaluasi walk-forward seragam (D9) yang sudah dikunci.
+- ⏭️ **Posisi saat ini: Tahap 8 (Optimasi Inventori).** Tahap 5–7 selesai. Tahap 6 (SARIMAX/RF/LSTM, 2 varian × 20 deret, rezim walk-forward D9) dan Tahap 7 (metrik + Diebold-Mariano + ablation GT) hijau. **Hasil Tahap 7:** model terbaik = **RF(gt)**; peringkat signifikan **RF > LSTM > SARIMAX**; Google Trends terbukti membantu signifikan **hanya untuk RF** (p=0.013), tidak untuk SARIMAX (p=0.114) / LSTM (p=0.102). Tahap 8 memakai galat one-step-ahead model terbaik untuk safety stock (D8/D9).
+- ⏳ **Tahap 8–9 BELUM dikerjakan** — lanjutkan dengan model terbaik dari Tahap 7 dan rezim evaluasi walk-forward seragam (D9) yang sudah dikunci.
 
 ---
 
@@ -411,8 +411,8 @@ Target: `pytest -q` hijau sebelum tahap dianggap selesai.
 5. [x] Tahap 3 (google trends) + cache + fallback.
 6. [x] Tahap 4 (EDA) → figures + ADF summary.
 7. [x] Tahap 5 (features, **2 varian: baseline & gt**) + test anti-leakage untuk kedua varian.
-8. [~] Tahap 6a/6b/6c (model, **2 varian × 20 deret = 40 artefak/algoritma**) → prediksi test kedua varian. *(6a selesai dgn rezim walk-forward D9; 6b/6c sedang berjalan)*
-9. [ ] Tahap 7 (metrics + DM antar-algoritma + **DM ablation baseline-vs-gt**) → `gt_ablation_comparison.csv` + tentukan model terbaik.
+8. [x] Tahap 6a/6b/6c (model, **2 varian × 20 deret = 40 artefak/algoritma**) → prediksi test kedua varian. *(ketiganya selesai dgn rezim walk-forward D9)*
+9. [x] Tahap 7 (metrics + DM antar-algoritma + **DM ablation baseline-vs-gt**) → `gt_ablation_comparison.csv` + model terbaik = **RF(gt)**. *(RF > LSTM > SARIMAX signifikan; GT signifikan hanya untuk RF)*
 10. [ ] Tahap 8 (inventory) → params + cost impact.
 11. [ ] Tahap 9 (Streamlit DSS).
 12. [ ] `src/run_all.py` end-to-end + `README` cara menjalankan.

@@ -1,0 +1,7 @@
+group,model1,model2,dm_stat,p_value,n,significant,better
+antar_algoritma,SARIMAX(gt),RF(gt),6.022728569030374,2.7024600819949588e-09,740,True,RF(gt)
+antar_algoritma,SARIMAX(gt),LSTM(gt),3.591398759756824,0.0003506741806921608,740,True,LSTM(gt)
+antar_algoritma,RF(gt),LSTM(gt),-4.482377350801842,8.553146536003703e-06,740,True,RF(gt)
+ablation_gt,SARIMAX(baseline),SARIMAX(gt),1.581342547584653,0.11422760909873966,740,False,tak signifikan
+ablation_gt,RF(baseline),RF(gt),2.4851823189979267,0.013168667284835341,740,True,RF(gt)
+ablation_gt,LSTM(baseline),LSTM(gt),1.636485649953742,0.10216375236282504,740,False,tak signifikan

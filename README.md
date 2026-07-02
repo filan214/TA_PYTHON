@@ -48,7 +48,7 @@ pytest -q
 | 6a. SARIMA/SARIMAX (baseline & gt) | `src/models/sarimax.py` | ✅ implemented + tests hijau |
 | 6b. Random Forest (baseline & gt) | `src/models/random_forest.py` | ✅ implemented + tests hijau |
 | 6c. LSTM (baseline & gt) | `src/models/lstm.py` | ✅ implemented + tests hijau |
-| 7. Evaluasi + Diebold-Mariano | `src/evaluation/` | ⬜ |
+| 7. Evaluasi + Diebold-Mariano | `src/evaluation/` | ✅ implemented + tests hijau |
 | 8. Optimasi inventori | `src/inventory/optimize.py` | ⬜ |
 | 9. DSS dashboard | `app/dashboard.py` | ⬜ |
 
@@ -87,3 +87,16 @@ pytest -q
   < SARIMAX gt 1.595 < SARIMAX baseline 1.642**. RF terbaik; LSTM ~setara tebak-rata-rata
   (data pendek/sparse); SARIMAX sMAPE ~97% vs RF/LSTM ~84%. GT konsisten sedikit membantu
   (ΔMAE −0.007 s/d −0.047) tapi kecil → signifikansi diputuskan uji DM (Tahap 7).
+- **Evaluasi final (Tahap 7, uji Diebold-Mariano, squared-error, koreksi HLN, α=0.05):**
+  - **Model terbaik = Random Forest + Google Trends** (MAE_mean 1.400, RMSE 1.747). MAPE
+    dihitung hanya pada minggu non-nol; sMAPE dilaporkan sebagai pendamping (data ber-nol).
+  - **Antar-algoritma (varian gt):** RF unggul **signifikan** atas SARIMAX (DM=6.02, p<0.001)
+    dan LSTM (DM=4.48, p<0.001); LSTM unggul atas SARIMAX (DM=3.59, p<0.001). Peringkat
+    signifikan: **RF > LSTM > SARIMAX** — tree model mengalahkan model klasik & deep learning
+    pada data ritel hyper-lokal yang pendek/sparse (temuan sejalan ref [21]).
+  - **Ablation GT (jawaban D5, berbasis bukti):** GT terbukti membantu **signifikan hanya untuk RF**
+    (baseline→gt, DM=2.49, p=0.013). Untuk SARIMAX (p=0.114) dan LSTM (p=0.102) **tidak signifikan**.
+    Per deret pun mayoritas tak signifikan (SARIMAX 17/20, RF 17/20, LSTM 15/20). Jadi klaim
+    "GT membantu" **tidak** berlaku umum di data toko riil ini — hanya untuk RF.
+  - Artefak: `metrics_summary.csv`, `metrics_per_series.csv`, `dm_tests.csv`,
+    `gt_ablation_comparison.csv`, `reports/figures/actual_vs_pred_*.png` (6 deret × 2 varian).
