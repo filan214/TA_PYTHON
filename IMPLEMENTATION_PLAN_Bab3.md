@@ -20,8 +20,9 @@
   - **MASE (D10):** semua model unggul atas naive (MASE<1). RF(gt) MASE_mean **0,762**, RF(base) 0,763, LSTM(gt) 0,843, SARIMAX(gt) 0,864; naive=1,000 & snaive=0,982 (konstruksi). Uji DM vs naive **signifikan untuk ketiga algoritma** (RF(gt) vs naive DM=−9,30 p<0,001) → **kriteria sukses baru "MASE<1 & signifikan vs naive" TERPENUHI**.
   - **Lantai teoretis sMAPE (D10):** rata-rata lantai oracle Poisson **67,4%** vs sMAPE aktual model terbaik **84,0%** (gap 16,5 poin) — mengonfirmasi sMAPE ~84% mendekati lantai struktural data (λ≈1,9, ~26% minggu nol), **bukan** indikasi model buruk. `smape_theoretical_floor.csv`.
   - **Verdict kandidat akurasi (D11):** dari 10 kandidat 6e, **tidak ada satu pun yang signifikan lebih baik** dari RF(gt) via uji DM (α=0,05). Croston (MAE 1,389)/TSB (1,388) & RF-Poisson-baseline (1,390) sedikit lebih rendah MAE-nya tetapi **tak signifikan** (p=0,55/0,47/0,43); RF-Poisson(gt), HGB-Poisson, dan sebagian ensemble justru **signifikan lebih buruk**. `accuracy_improvement_verdict.csv`.
-- ⏭️ **Posisi saat ini: Tahap 7 + backfill D10/D11 SELESAI. Pemenang FINAL terkunci = Random Forest + Google Trends (RF·gt).** Objective Poisson & metode intermittent (Croston/TSB) diuji sesuai teori namun tak mengungguli RF secara statistik — memperkuat (bukan mengubah) pemilihan model. **Siap lanjut Tahap 8 (Optimasi Inventori)** memakai galat one-step RF(gt) (D8/D9).
-- ⏳ **Tahap 8–9 BELUM dikerjakan.**
+- ⏭️ **Posisi saat ini: Tahap 7 + backfill D10/D11 SELESAI. Pemenang FINAL terkunci = Random Forest + Google Trends (RF·gt).** Objective Poisson & metode intermittent (Croston/TSB) diuji sesuai teori namun tak mengungguli RF secara statistik — memperkuat (bukan mengubah) pemilihan model.
+- ✅ **Tahap 8 (Optimasi Inventori) SELESAI (D8/D9).** Parameter dihitung dari **σ galat one-step RF(gt)** (bukan σ permintaan historis): `z=1,645` (service 95%), `L=2` mgg, `R=1` mgg. `inventory_params.csv` (20 deret) — SS rata2 **3,97** (2,35–5,61), ROP rata2 8,12, OUL rata2 10,19. **Dampak biaya 3 algoritma** (`cost_impact.csv`, simulasi periodic-review order-up-to lost-sales pada 37 minggu uji, harga/unit dinormalisasi=1): RF(gt) SS 3,967/holding **90,09**/fill 99,30%; LSTM(gt) 4,023/90,90/99,33%; SARIMAX(gt) 4,353/95,62/99,57% — **model paling akurat (RF) butuh safety stock & holding cost terendah pada service ~setara** (mengonkretkan nilai akurasi ramalan, D8). Sensitivitas (`inventory_sensitivity.csv`): SS naik monoton dgn service_level (3,09→3,97→5,61 utk 0,90/0,95/0,99), stockout-weeks turun (18→13→1). `tests/test_inventory.py` (10 uji) hijau; suite penuh **124 hijau**.
+- ⏳ **Tahap 9 (DSS Dashboard) + `src/run_all.py` BELUM dikerjakan.**
 
 ---
 
@@ -458,7 +459,7 @@ Target: `pytest -q` hijau sebelum tahap dianggap selesai.
 9. [x] Tahap 7 (metrics + DM antar-algoritma + **DM ablation baseline-vs-gt**) → `gt_ablation_comparison.csv` + tentukan model terbaik. *(dijalankan dgn MAPE/RMSE/MAE/sMAPE; hasil aktual: sMAPE ~84% semua model — lih. STATUS PROGRES)*
 9b. [x] **BACKFILL D10**: MASE ditambahkan ke `metrics.py`, DM vs naive (kelompok-3), `smape_theoretical_floor.csv`. Kesimpulan model terbaik direvisi ke **MASE<1 & signifikan vs naive**: RF(gt) MASE 0,762<1, DM vs naive −9,30 (p<0,001) → **MEMENUHI**.
 9c. [x] **BACKFILL D11**: kandidat 6e masuk tabel metrik + DM kelompok-4 → `accuracy_improvement_verdict.csv`. **Tidak ada kandidat signifikan lebih baik** → pemenang final tetap **RF(gt)** (lih. STATUS PROGRES).
-10. [ ] Tahap 8 (inventory) → params + cost impact.
+10. [x] Tahap 8 (inventory) → `src/inventory/optimize.py` + `tests/test_inventory.py` hijau. Dari galat one-step RF(gt) (D8/D9): `inventory_params.csv` (20 deret: SS/ROP/OUL), `cost_impact.csv` (3 algoritma via simulasi order-up-to), `inventory_sensitivity.csv` (grid service_level × holding_cost). RF(gt) = SS terendah (3,97) → holding cost terendah (90,09) pada service ~setara (lih. STATUS PROGRES).
 11. [ ] Tahap 9 (Streamlit DSS).
 12. [ ] `src/run_all.py` end-to-end + `README` cara menjalankan.
 13. [ ] `pytest -q` seluruhnya hijau.

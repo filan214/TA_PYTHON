@@ -51,7 +51,7 @@ pytest -q
 | 6d. Baseline naif/seasonal-naif (D10) | `src/models/naive.py` | ✅ implemented + tests hijau |
 | 6e. Kandidat perbaikan akurasi (D11) | `src/models/{rf_poisson,croston,ensemble}.py` | ✅ implemented + tests hijau |
 | 7. Evaluasi + DM (4 kelompok) + MASE + verdict | `src/evaluation/` | ✅ implemented + tests hijau |
-| 8. Optimasi inventori | `src/inventory/optimize.py` | ⬜ |
+| 8. Optimasi inventori (D8) | `src/inventory/optimize.py` | ✅ implemented + tests hijau |
 | 9. DSS dashboard | `app/dashboard.py` | ⬜ |
 
 ## Catatan data (diverifikasi pada data riil)
@@ -121,3 +121,14 @@ pytest -q
   tetap Random Forest + Google Trends (RF·gt)**; eksperimen ini memperkuat (bukan mengubah)
   pemilihan model — objective Poisson & metode intermittent tak mengungguli RF pada data ini.
   `accuracy_improvement_verdict.csv`.
+- **Optimasi inventori (Tahap 8, D8):** parameter pengadaan dihitung dari **σ galat peramalan
+  one-step RF(gt)** (bukan σ permintaan historis) — `SS = z·σ·√L`, `ROP = μ·L + SS`,
+  `OUL = ROP + μ·R` dgn z=1,645 (service 95%), L=2 mgg, R=1 mgg. Per 20 deret: SS rata-rata
+  **3,97** unit (2,35–5,61), ROP 8,12, OUL 10,19 (`inventory_params.csv`). **Dampak biaya
+  antar-3-algoritma** (simulasi periodic-review order-up-to lost-sales pada 37 minggu uji,
+  harga/unit dinormalisasi=1; `cost_impact.csv`): **RF(gt) butuh safety stock terkecil (3,97)
+  → holding cost terendah (90,09)** pada tingkat layanan ~setara (fill-rate ~99,3–99,6%,
+  stockout 13 minggu-deret utk ketiganya), vs LSTM(gt) 4,02/90,90 & SARIMAX(gt) 4,35/95,62 —
+  **akurasi ramalan yang lebih tinggi langsung menekan biaya simpan** (rasional D8). Sensitivitas
+  (`inventory_sensitivity.csv`): SS naik monoton dgn service_level (3,09→3,97→5,61 pada
+  0,90/0,95/0,99) & stockout turun (18→13→1); holding cost berskala linier dgn `holding_cost`.
