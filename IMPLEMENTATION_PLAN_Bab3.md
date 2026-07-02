@@ -12,8 +12,9 @@
 - 📊 **Temuan aktual Tahap 4 (EDA):** seasonal strength lemah untuk seluruh 20 deret (Fs<0,64, m=52), dengan musiman terkonsentrasi di minggu-minggu event (Lebaran/Harbolnas) — bukan siklus tahunan halus. Temuan ini memicu **revisi D6** (lihat di bawah).
 - 🔄 **REVISI PADA RENCANA #1 (D5 + Tahap 5, 6, 7)**: Google Trends semula diperlakukan sebagai fitur eksogen wajib (langsung dipasang ke semua model). **Sekarang diubah menjadi ablation study**: tiap algoritma dilatih dalam dua varian — `baseline` (tanpa GT) dan `gt` (dengan GT) — supaya kontribusi GT diuji secara empiris (uji Diebold-Mariano), bukan diasumsikan. Lihat catatan lengkap di D5 (Bagian 2) dan Tahap 5–7 (Bagian 5) yang sudah direvisi.
 - 🔄 **REVISI PADA RENCANA #2 (D6 + Tahap 5, 6a)**: berdasarkan temuan Tahap 4 di atas, **orde musiman SARIMA(X) kini diputuskan per-deret secara data-driven via AIC** — TIDAK dipaksa non-nol di semua 20 deret. Tahap 5 menambahkan fitur **Fourier(m=52)** di samping fitur kalender yang sudah ada, agar sinyal musiman tetap tertangkap oleh RF & LSTM juga. Lihat catatan lengkap di D6 (Bagian 2) dan Tahap 5, 6a (Bagian 5) yang sudah direvisi.
-- ⏭️ **Sebelum lanjut ke Tahap 5**, verifikasi ulang artefak Tahap 1–4 masih sesuai kontrak (Bagian 1.2 & Tahap 2 DoD) — terutama karena Tahap 5 sekarang bergantung pada `data/interim/google_trends.csv` (Tahap 3) yang harus tetap dipakai apa adanya, tanpa fetch ulang.
-- ⏳ **Tahap 5–9 BELUM dikerjakan** — lanjutkan dari Tahap 5 dengan desain ablation GT (D5) dan seasonal data-driven (D6) yang baru.
+- 🔄 **REVISI PADA RENCANA #3 (D9 + Tahap 6, 7, 8)**: ditemukan saat implementasi Tahap 6a bahwa RF/LSTM alami *one-step-ahead* sedangkan SARIMAX default ke *fixed-origin* 37-langkah — asimetri ini merusak validitas uji DM (Tahap 7) dan formula *safety stock* (Tahap 8), bukan cuma soal keadilan. **Diputuskan: ketiga algoritma dievaluasi dengan one-step-ahead walk-forward yang identik** (SARIMAX via update state `append()`/`apply()`, orde tetap dari Tahap 6a, tanpa re-fit tiap langkah). Lihat catatan lengkap di D9 (Bagian 2) dan Tahap 6/7/8 (Bagian 5) yang sudah direvisi.
+- ⏭️ **Posisi saat ini: Tahap 6b (Random Forest).** Tahap 5 (kedua varian fitur) dan Tahap 6a (SARIMAX, dgn rezim walk-forward D9) sudah selesai. Pastikan 6b dan 6c mengikuti rezim evaluasi one-step-ahead walk-forward yang sama (D9) — keduanya sudah alami one-step-ahead by design, tapi verifikasi implementasinya tidak diam-diam berubah jadi rekursif/multi-step.
+- ⏳ **Tahap 6c–9 BELUM dikerjakan** — lanjutkan dengan desain ablation GT (D5), seasonal data-driven (D6), dan rezim evaluasi walk-forward seragam (D9) yang sudah dikunci.
 
 ---
 
@@ -96,6 +97,13 @@ Setelah mapping, tidak boleh ada 'Other'. Tambahkan assert.
 | D6 | **Periode musiman s = 52** (mingguan tahunan) tetap jadi parameter kontrak, TAPI **orde musiman (P,D,Q) diputuskan per-deret secara data-driven** (AIC/validasi), bukan dipaksa non-nol di semua deret | EDA (Tahap 4) menunjukkan seasonal strength lemah (Fs<0,64 untuk seluruh 20 deret) dan musiman terkonsentrasi di minggu-minggu event (Lebaran/Harbolnas) — bukan pola musiman halus berulang. Memaksa (P,D,Q) non-nol pada semua deret berisiko tinggi non-konvergen (lih. §9) dan salah spesifikasi. |
 | D7 | **Metrik = MAPE, RMSE, MAE**; target MAPE < 15%; uji **Diebold-Mariano** | Sesuai Bab II/III |
 | D8 | **Safety stock berbasis σ galat peramalan** (bukan σ permintaan historis) | Pendekatan Prak dkk. [23] di Bab II |
+| D9 | **Rezim evaluasi = one-step-ahead walk-forward untuk KETIGA algoritma** (bukan fixed-origin multi-step untuk SARIMAX vs one-step untuk RF/LSTM) | Tanpa penyeragaman ini: (a) formula *safety stock* di D8/Tahap 8 jadi tidak valid secara konseptual, karena mengasumsikan σ galat *one-step-ahead*, bukan galat multi-step yang terakumulasi; (b) uji Diebold-Mariano (D7) tidak sah karena membandingkan loss dari rezim peramalan yang berbeda, bukan forecast origin yang sepadan; (c) tidak merepresentasikan skenario riil DSS (toko cek stok mingguan, selalu punya data aktual minggu sebelumnya sebelum merekomendasikan pesanan minggu ini). |
+
+**Catatan D9 — kenapa one-step walk-forward untuk ketiga algoritma (ditambahkan setelah Tahap 6a menemukan asimetri rezim):** RF dan LSTM secara alami melakukan peramalan *one-step-ahead* karena fitur lag/rolling-nya dihitung dari nilai permintaan aktual yang sudah diketahui hingga t-1. Jika SARIMAX dibiarkan melakukan *fixed-origin* 37-langkah (meramal seluruh periode uji sekaligus dari satu titik tanpa pernah "melihat" data aktual di antaranya), ketiga algoritma tidak lagi dievaluasi pada tugas yang sama — dan ini bukan sekadar isu keadilan naratif, tapi merusak validitas dua komponen lain yang sudah dikunci di kontrak:
+- **D8 (safety stock)** memakai σ galat peramalan yang secara eksplisit diasumsikan *one-step-ahead* (praktik umum dalam teori inventori, distribusi galat 1-periode diskalakan `sqrt(lead_time)`). Galat dari peramalan 37-langkah terakumulasi secara berbeda dan akan membuat perhitungan *safety stock* salah secara konseptual, bukan hanya kurang akurat.
+- **D7 (uji Diebold-Mariano)** mensyaratkan pasangan galat yang dihitung pada *forecast origin* yang sepadan antar-model. Membandingkan galat dari rezim yang berbeda (fixed-origin vs rolling) membuat hasil uji DM tidak sah secara statistik.
+
+Karena itu, ketiga algoritma dievaluasi dalam rezim **one-step-ahead walk-forward** yang identik pada 37 minggu data uji: pada tiap langkah, model diberi seluruh data aktual hingga minggu t-1 (termasuk data uji yang sudah "terlewati"), meramal minggu t, lalu majunya satu minggu dan mengulang. Untuk SARIMAX, ini diimplementasikan lewat pembaruan state (`statsmodels` `append()`/`apply()`) menggunakan orde yang sudah dipilih di Tahap 6a — **bukan** re-fit `auto_arima` di tiap langkah (mahal dan mengubah identitas model 37 kali). Untuk RF/LSTM, tidak ada perubahan karena keduanya sudah alami one-step-ahead. Rezim ini juga paling konsisten dengan skenario riil DSS: pemilik toko selalu mengecek stok dan data penjualan minggu sebelumnya sebelum menentukan pesanan minggu ini — persis kondisi *walk-forward*, bukan meramal 37 minggu ke depan secara membabi buta.
 
 **Catatan D6 — kenapa data-driven per-deret, bukan dipaksa (ditambahkan setelah Tahap 4 EDA aktual):** Hasil EDA riil menunjukkan seasonal strength (Fs) di bawah 0,64 untuk seluruh 20 deret gerai×merek, dengan komponen musiman yang jelas justru terkonsentrasi sempit di sekitar Lebaran dan Harbolnas (11.11/12.12), bukan berupa siklus tahunan yang halus dan berulang. Karakteristik ini secara statistik lebih cocok ditangkap lewat **fitur eksogen** (dummy kalender + Fourier) daripada lewat suku ARIMA musiman (P,D,Q)₅₂ yang didesain untuk autokorelasi musiman yang mulus — apalagi dengan hanya 147 titik latih (~2,8 siklus tahunan), estimasi suku musiman penuh rawan tidak stabil/non-konvergen (persis risiko yang sudah dicatat di Bagian 9). Karena itu:
 - `s = 52` tetap menjadi parameter periodisitas yang tersedia untuk pencarian orde (tidak dihapus dari kontrak), tetapi (P,D,Q) musiman **tidak dipaksa non-nol** — dipilih AIC per deret di Tahap 6a, sehingga sebagian deret bisa saja berakhir non-seasonal jika itu yang terbaik.
@@ -291,11 +299,14 @@ class Forecaster(ABC):
 
 Latih **per deret store×brand, per varian fitur** (20 deret × 2 varian = 40 model per algoritma) — default **per deret** (lebih sederhana & sesuai naskah). Simpan artefak ke `models/<algo>/<variant>/<store>_<brand>.*`.
 
+**Rezim evaluasi (D9):** ketiga algoritma dievaluasi dengan **one-step-ahead walk-forward** pada 37 minggu data uji — di tiap langkah, model diberi data aktual hingga t-1, meramal t, lalu maju satu minggu. Ini WAJIB seragam di ketiga algoritma (lihat Catatan D9 di atas); jangan biarkan SARIMAX melakukan fixed-origin multi-step sementara RF/LSTM one-step.
+
 **6a — `sarimax.py`:**
 - Orde via `pmdarima.auto_arima` (`seasonal=True`, `m=52`, `stepwise=True`) per deret, dipandu batas awal `d`/`D` dari `eda_summary.json` (Tahap 4) dan ACF/PACF. **Seasonal order (P,D,Q) TIDAK dipaksa non-nol** — biarkan `auto_arima` memilih via AIC, termasuk kemungkinan (0,0,0)₅₂ jika itu yang terbaik untuk deret tertentu (lih. D6). Ini keputusan data-driven per deret, bukan penyeragaman di awal.
 - Varian `baseline` = **SARIMA** dengan Fourier+kalender sebagai `exog` (tanpa `gt_index`); varian `gt` = **SARIMAX** dengan Fourier+kalender+`gt_index` sebagai `exog`. Jadi kedua varian tetap punya exog — bedanya murni ada/tidaknya `gt_index`, agar perbandingan ablation benar-benar isolasi efek GT saja. Cari orde ARIMA terpisah untuk tiap varian (exog yang berbeda bisa mengubah orde optimal) — dokumentasikan kedua orde per deret.
 - Simpan orde terpilih (termasuk kasus seasonal order = 0) per deret **per varian** ke `reports/results/sarima_orders.csv`, dengan kolom tambahan `has_seasonal_terms` (bool) untuk memudahkan pelaporan di Bab IV — mis. "X dari 20 deret memilih orde musiman non-nol".
 - **Gotcha (termudahkan oleh D6):** karena seasonal order kini data-driven, risiko non-konvergen m=52 berkurang signifikan (deret dengan sinyal musiman lemah akan otomatis memilih orde rendah/nol). Tetap sediakan fallback ke non-seasonal jika `auto_arima` tetap gagal konvergen pada rentang orde manapun, dan catat di log.
+- **Evaluasi (D9 — WAJIB):** setelah orde terpilih dari data latih, prediksi pada 37 minggu uji dilakukan sebagai **one-step-ahead walk-forward**, bukan fixed-origin 37-langkah. Gunakan `statsmodels` `append()`/`apply()` untuk memperbarui state model dengan data aktual tiap minggu tanpa re-fit orde (orde tetap sama dengan yang dipilih di data latih — hanya state/observasi yang diperbarui). Ini menjaga biaya komputasi rendah sekaligus menyamakan rezim evaluasi dengan RF/LSTM yang sudah alami one-step-ahead.
 
 **6b — `random_forest.py`:**
 - `RandomForestRegressor`; `GridSearchCV` dgn `cv=TimeSeriesSplit(n_splits=5)`.
@@ -312,13 +323,13 @@ Latih **per deret store×brand, per varian fitur** (20 deret × 2 varian = 40 mo
 
 **DoD (semua model):**
 - Fungsi `train_all(algo, variant, cfg)` menghasilkan 20 artefak per (algoritma, varian) tanpa error (atau log fallback jelas untuk deret bermasalah) → total 40 artefak per algoritma, 120 total.
-- Prediksi horizon uji (37 minggu) tersedia untuk tiap deret × varian → `reports/results/predictions_<algo>_<variant>.parquet`.
+- Prediksi horizon uji (37 minggu) tersedia untuk tiap deret × varian → `reports/results/predictions_<algo>_<variant>.parquet`, **dihasilkan lewat rezim one-step-ahead walk-forward yang identik untuk ketiga algoritma (D9)** — assert tidak ada algoritma yang menggunakan fixed-origin multi-step sementara yang lain one-step.
 
 ### Tahap 7 — Evaluasi, Diebold-Mariano, dan Ablation Study Google Trends (Bab III §3.1.7)
 
 **`metrics.py`:** implement MAPE (aman untuk aktual 0 → gunakan sMAPE atau MAPE dengan epsilon, dokumentasikan pilihan; **catatan:** deret ini punya minggu nol, jadi MAPE murni bisa meledak — pakai **sMAPE** sebagai pendamping dan laporkan keduanya), RMSE, MAE. Agregasi: per deret, lalu rata-rata (mean & weighted-by-volume) per (algoritma, varian).
 
-**`diebold_mariano.py`:** implement uji DM (loss=squared error, horizon=1 atau multi; two-sided). Dua kelompok perbandingan:
+**`diebold_mariano.py`:** implement uji DM (loss=squared error, horizon=1 atau multi; two-sided). **Prasyarat validitas (D9):** galat yang dibandingkan harus berasal dari rezim evaluasi yang sama (one-step-ahead walk-forward) untuk kedua model dalam tiap pasangan — jangan menjalankan uji DM pada galat yang dihasilkan dari rezim berbeda. Dua kelompok perbandingan:
 1. **Antar-algoritma** (pada varian terbaik masing-masing, biasanya `gt` jika terbukti membantu, atau `baseline` jika tidak): SARIMAX vs RF, SARIMAX vs LSTM, RF vs LSTM.
 2. **Ablation per algoritma** (baseline vs gt, algoritma yang sama): SARIMA vs SARIMAX, RF-baseline vs RF-gt, LSTM-baseline vs LSTM-gt — ini yang **langsung menjawab pertanyaan "apakah Google Trends terbukti membantu di data toko riil ini"**, per algoritma, dengan p-value, bukan asumsi.
 
@@ -336,7 +347,7 @@ Latih **per deret store×brand, per varian fitur** (20 deret × 2 varian = 40 mo
 ### Tahap 8 — Optimasi Inventori (Bab III §3.1.8)
 
 **`inventory/optimize.py`:**
-- Ambil **model terbaik** — yaitu kombinasi (algoritma, varian) dengan error terendah yang signifikan secara statistik dari Tahap 7, bisa jadi `baseline` atau `gt` tergantung hasil ablation — → galat peramalan pada test.
+- Ambil **model terbaik** — yaitu kombinasi (algoritma, varian) dengan error terendah yang signifikan secara statistik dari Tahap 7, bisa jadi `baseline` atau `gt` tergantung hasil ablation — → galat peramalan pada test (**wajib galat one-step-ahead walk-forward sesuai D9** — formula di bawah tidak valid untuk galat multi-step).
 - `safety_stock = z * σ_forecast_error * sqrt(lead_time_weeks)` — `z` dari `service_level` (config, default 95% → z≈1.645), `lead_time_weeks` (config, default 1–2).
 - `reorder_point = mean_demand_lead_time + safety_stock`.
 - `order_up_to_level = reorder_point + review_period_demand` (order-up-to, sesuai [16]).
@@ -399,8 +410,8 @@ Target: `pytest -q` hijau sebelum tahap dianggap selesai.
 4. [x] Tahap 2 (aggregate) + test → hijau, **verifikasi zero-week ≤ 0.30**.
 5. [x] Tahap 3 (google trends) + cache + fallback.
 6. [x] Tahap 4 (EDA) → figures + ADF summary.
-7. [ ] Tahap 5 (features, **2 varian: baseline & gt**) + test anti-leakage untuk kedua varian.
-8. [ ] Tahap 6a/6b/6c (model, **2 varian × 20 deret = 40 artefak/algoritma**) → prediksi test kedua varian.
+7. [x] Tahap 5 (features, **2 varian: baseline & gt**) + test anti-leakage untuk kedua varian.
+8. [~] Tahap 6a/6b/6c (model, **2 varian × 20 deret = 40 artefak/algoritma**) → prediksi test kedua varian. *(6a selesai dgn rezim walk-forward D9; 6b/6c sedang berjalan)*
 9. [ ] Tahap 7 (metrics + DM antar-algoritma + **DM ablation baseline-vs-gt**) → `gt_ablation_comparison.csv` + tentukan model terbaik.
 10. [ ] Tahap 8 (inventory) → params + cost impact.
 11. [ ] Tahap 9 (Streamlit DSS).
@@ -417,6 +428,7 @@ Target: `pytest -q` hijau sebelum tahap dianggap selesai.
 - **pytrends tak stabil** → cache wajib + fallback `--no-trends`.
 - **Google Trends kini ablation study, bukan fitur wajib** (lih. D5). Ini menggandakan jumlah model terlatih (40 vs 20 per algoritma) — pastikan waktu komputasi masih wajar untuk skala data ini (147 titik train, model ringan); jika terlalu lambat, prioritaskan SARIMA/SARIMAX dulu (paling cepat) sebelum RF/LSTM. **Jangan** melaporkan GT sebagai "terbukti membantu" tanpa didukung `gt_ablation_comparison.csv` dan uji DM ablation yang signifikan.
 - **Beberapa SKU lifecycle pendek** — tapi karena agregasi ke merek, efeknya teredam. Jangan kembali ke per-SKU tanpa menangani intermittency (mis. Croston) — di luar scope naskah saat ini.
+- **Rezim evaluasi harus seragam (D9).** RF/LSTM alami one-step-ahead; SARIMAX **jangan** dibiarkan default ke fixed-origin multi-step forecast (`predict(steps=37)` sekali jalan) — ini akan merusak validitas uji DM (Tahap 7) dan formula *safety stock* (Tahap 8). Implementasikan walk-forward via update state (`append()`/`apply()`), orde tetap dari Tahap 6a, jangan re-fit tiap langkah.
 - **`sales_no` bukan primary key** — jangan pakai untuk dedup; pakai `drop_duplicates()` baris penuh.
 - **Reproducibility**: seed semua (`numpy`, `random`, `tensorflow`), dan `PYTHONHASHSEED`.
 
