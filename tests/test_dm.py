@@ -100,6 +100,36 @@ def test_run_comparisons_two_groups():
     assert {"dm_stat", "p_value", "significant", "better"} <= set(dm.columns)
 
 
+def test_run_comparisons_adds_vs_naive_group():
+    """naive_preds -> kelompok ke-3 'vs_naive' (D10): tiap algo vs tiap naif."""
+    preds = _preds_all()
+    ref = preds[("rf", "gt")][["store", "brand", "week_start", "y_true"]].copy()
+    naive_df = ref.copy()
+    naive_df["y_pred"] = ref["y_true"] + 2.0                # naif jelas lebih buruk
+    dm = DM.run_comparisons(preds, {"sarimax": "gt", "rf": "gt", "lstm": "gt"},
+                            naive_preds={"naive": naive_df})
+    assert "vs_naive" in set(dm["group"])
+    assert (dm["group"] == "vs_naive").sum() == 3          # 3 algo × 1 naif
+
+
+def test_compare_candidates_adopts_only_if_significant():
+    """Kelompok 4 (D11): adopsi HANYA bila kandidat signifikan lebih baik dari pemenang lama."""
+    preds = _preds_all()
+    best_key = ("rf", "gt")
+    ref = preds[best_key][["store", "brand", "week_start", "y_true"]].copy()
+    good = ref.copy(); good["y_pred"] = ref["y_true"] + 0.01   # nyaris sempurna -> unggul
+    bad = ref.copy(); bad["y_pred"] = ref["y_true"] + 5.0      # jauh lebih buruk
+    dm4, verdict = DM.compare_candidates(preds, best_key, {"good": good, "bad": bad},
+                                         naive_mae=None)
+    assert set(dm4["group"]) == {"kandidat_akurasi"}
+    v = verdict.set_index("candidate")
+    assert bool(v.loc["good", "signif_better_than_old"]) is True
+    assert bool(v.loc["bad", "signif_better_than_old"]) is False
+    assert "ADOPSI" in v.loc["good", "decision"]
+    # baris referensi pemenang lama ada & tak pernah "adopsi"
+    assert (~verdict["signif_better_than_old"] | verdict["candidate"].str.contains("good")).all()
+
+
 def test_build_gt_ablation_series_and_summary():
     preds = _preds_all()
     tab = DM.build_gt_ablation(preds)

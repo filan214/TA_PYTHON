@@ -104,8 +104,14 @@ def dm_from_frames(df1: pd.DataFrame, df2: pd.DataFrame, h: int = 1,
 # --- Dua kelompok perbandingan ---------------------------------------------
 
 def run_comparisons(preds: dict[tuple[str, str], pd.DataFrame],
-                    best_variant: dict[str, str], loss: str = "squared") -> pd.DataFrame:
-    """dm_tests.csv: antar-algoritma (varian terbaik) + ablation GT per algoritma."""
+                    best_variant: dict[str, str], loss: str = "squared",
+                    naive_preds: dict[str, pd.DataFrame] | None = None) -> pd.DataFrame:
+    """dm_tests.csv: antar-algoritma + ablation GT + (opsional) vs-naif (D10).
+
+    Bila `naive_preds` diberikan, tambah Kelompok 3: tiap (algoritma, varian terbaik)
+    vs tiap baseline naif — membuktikan apakah kompleksitas model bermanfaat dibanding
+    asumsi sederhana pemilik toko (D10). Tanpa `naive_preds` -> hanya 2 kelompok.
+    """
     rows = []
 
     # Kelompok 1 — antar-algoritma pada varian terbaik masing-masing
@@ -138,7 +144,88 @@ def run_comparisons(preds: dict[tuple[str, str], pd.DataFrame],
             "better": winner if r["p_value"] < 0.05 else "tak signifikan",
         })
 
+    # Kelompok 3 — vs baseline naif (D10): tiap (algo, varian terbaik) vs tiap naif
+    if naive_preds:
+        for algo in ALGOS:
+            v = best_variant.get(algo)
+            if (algo, v) not in preds:
+                continue
+            model_label = f"{ALGO_LABEL[algo]}({v})"
+            for method, ndf in naive_preds.items():
+                r = dm_from_frames(preds[(algo, v)], ndf, loss=loss)
+                winner = {1: model_label, 2: method, 0: "seri"}[r["better"]]
+                rows.append({
+                    "group": "vs_naive",
+                    "model1": model_label, "model2": method,
+                    "dm_stat": r["dm_stat"], "p_value": r["p_value"], "n": r["n"],
+                    "significant": bool(r["p_value"] < 0.05),
+                    "better": winner if r["p_value"] < 0.05 else "tak signifikan",
+                })
+
     return pd.DataFrame(rows)
+
+
+def _agg_mae_mase(df: pd.DataFrame,
+                  naive_mae: dict[tuple[str, str], float] | None) -> tuple[float, float]:
+    """Rata-rata antar-deret MAE & MASE untuk satu set prediksi (kolom kompatibel Tahap 7)."""
+    from src.evaluation.metrics import mae as _mae, mase as _mase
+
+    maes, mases = [], []
+    for (store, brand), g in df.groupby(["store", "brand"]):
+        g = g.sort_values("week_start")
+        a, p = g["y_true"].to_numpy(), g["y_pred"].to_numpy()
+        maes.append(_mae(a, p))
+        nm = None if naive_mae is None else naive_mae.get((store, brand))
+        mases.append(_mase(a, p, nm))
+    mase_arr = np.asarray(mases, float)
+    mase_mean = float(np.nanmean(mase_arr)) if np.isfinite(mase_arr).any() else float("nan")
+    return float(np.nanmean(maes)), mase_mean
+
+
+def compare_candidates(preds: dict[tuple[str, str], pd.DataFrame], best_key: tuple[str, str],
+                       candidate_preds: dict[str, pd.DataFrame],
+                       naive_mae: dict[tuple[str, str], float] | None = None,
+                       loss: str = "squared") -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Kelompok 4 (D11): pemenang lama vs tiap kandidat 6e -> (dm_rows, verdict).
+
+    Pemenang final berganti HANYA jika kandidat signifikan lebih baik (p<0.05 & loss
+    lebih rendah). Baris pertama verdict = pemenang lama sebagai referensi.
+    """
+    old = preds[best_key]
+    old_label = f"{ALGO_LABEL[best_key[0]]}({best_key[1]})"
+    old_mae, old_mase = _agg_mae_mase(old, naive_mae)
+
+    dm_rows = []
+    verdict_rows = [{
+        "candidate": f"{old_label} [pemenang lama]", "MAE_mean": round(old_mae, 4),
+        "MASE_mean": round(old_mase, 4), "dm_stat": np.nan,
+        "p_value_vs_old_winner": np.nan, "signif_better_than_old": False,
+        "decision": "REFERENSI (pemenang Tahap 7)",
+    }]
+
+    for label, cand in candidate_preds.items():
+        r = dm_from_frames(old, cand, loss=loss)   # better=1 -> lama unggul, 2 -> kandidat unggul
+        cand_mae, cand_mase = _agg_mae_mase(cand, naive_mae)
+        sig = r["p_value"] < 0.05
+        adopt = bool(sig and r["better"] == 2)
+        if adopt:
+            decision = "ADOPSI (signifikan lebih baik)"
+        elif sig and r["better"] == 1:
+            decision = "tolak (signifikan LEBIH BURUK dari pemenang lama)"
+        else:
+            decision = "tolak (tak berbeda signifikan)"
+        dm_rows.append({
+            "group": "kandidat_akurasi", "model1": old_label, "model2": label,
+            "dm_stat": r["dm_stat"], "p_value": r["p_value"], "n": r["n"],
+            "significant": bool(sig),
+            "better": (label if adopt else old_label if (sig and r["better"] == 1) else "tak signifikan"),
+        })
+        verdict_rows.append({
+            "candidate": label, "MAE_mean": round(cand_mae, 4), "MASE_mean": round(cand_mase, 4),
+            "dm_stat": round(r["dm_stat"], 4), "p_value_vs_old_winner": round(r["p_value"], 4),
+            "signif_better_than_old": adopt, "decision": decision,
+        })
+    return pd.DataFrame(dm_rows), pd.DataFrame(verdict_rows)
 
 
 def build_gt_ablation(preds: dict[tuple[str, str], pd.DataFrame],

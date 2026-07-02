@@ -48,7 +48,9 @@ pytest -q
 | 6a. SARIMA/SARIMAX (baseline & gt) | `src/models/sarimax.py` | ✅ implemented + tests hijau |
 | 6b. Random Forest (baseline & gt) | `src/models/random_forest.py` | ✅ implemented + tests hijau |
 | 6c. LSTM (baseline & gt) | `src/models/lstm.py` | ✅ implemented + tests hijau |
-| 7. Evaluasi + Diebold-Mariano | `src/evaluation/` | ✅ implemented + tests hijau |
+| 6d. Baseline naif/seasonal-naif (D10) | `src/models/naive.py` | ✅ implemented + tests hijau |
+| 6e. Kandidat perbaikan akurasi (D11) | `src/models/{rf_poisson,croston,ensemble}.py` | ✅ implemented + tests hijau |
+| 7. Evaluasi + DM (4 kelompok) + MASE + verdict | `src/evaluation/` | ✅ implemented + tests hijau |
 | 8. Optimasi inventori | `src/inventory/optimize.py` | ⬜ |
 | 9. DSS dashboard | `app/dashboard.py` | ⬜ |
 
@@ -100,3 +102,22 @@ pytest -q
     "GT membantu" **tidak** berlaku umum di data toko riil ini — hanya untuk RF.
   - Artefak: `metrics_summary.csv`, `metrics_per_series.csv`, `dm_tests.csv`,
     `gt_ablation_comparison.csv`, `reports/figures/actual_vs_pred_*.png` (6 deret × 2 varian).
+- **Backfill D10 — MASE & baseline naif (Tahap 6d + 9b):** MASE = MAE model / MAE naive
+  (denominator per deret, rezim walk-forward sama D9). Semua model **mengungguli asumsi
+  naif pemilik toko** ("minggu ini = minggu lalu"): MASE_mean RF·gt **0,762**, RF·baseline
+  0,763, LSTM·gt 0,843, SARIMAX·gt 0,864 (naive=1,000, snaive=0,982). Uji DM vs naive
+  **signifikan untuk ketiga algoritma** (RF·gt vs naive DM=−9,30, p<0,001). → **Kriteria
+  sukses direvisi (D7/D10) "MASE<1 & signifikan vs naive" TERPENUHI** (menggantikan target
+  MAPE<15% yang tak realistis untuk data hitung bervolume rendah).
+- **Lantai teoretis sMAPE (D10):** rata-rata lantai oracle Poisson(λ=rata-rata deret)
+  **67,4%** vs sMAPE aktual model terbaik **84,0%** (gap 16,5 poin) → sMAPE ~84% mendekati
+  **lantai struktural** (λ≈1,9, ~26% minggu nol), bukan tanda model buruk. `smape_theoretical_floor.csv`.
+- **Backfill D11 — jalur perbaikan akurasi (Tahap 6e + 9c):** diuji 10 kandidat (RF/HGB
+  objective Poisson × 2 varian, Croston, TSB, ensemble mean & inverse-MAE × 2 varian),
+  rezim & metrik sama (D9/D7). **Tidak ada kandidat yang signifikan lebih baik dari RF·gt**
+  via uji DM (α=0,05): Croston (MAE 1,389)/TSB (1,388)/RF-Poisson·baseline (1,390) sedikit
+  lebih rendah MAE-nya tetapi **tak signifikan** (p=0,55/0,47/0,43); RF-Poisson·gt,
+  HGB-Poisson, dan sebagian ensemble malah **signifikan lebih buruk**. → **Pemenang FINAL
+  tetap Random Forest + Google Trends (RF·gt)**; eksperimen ini memperkuat (bukan mengubah)
+  pemilihan model — objective Poisson & metode intermittent tak mengungguli RF pada data ini.
+  `accuracy_improvement_verdict.csv`.

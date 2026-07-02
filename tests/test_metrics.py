@@ -45,6 +45,29 @@ def test_mape_all_zero_is_nan():
     assert np.isnan(M.mape([0, 0, 0], [1, 2, 3]))
 
 
+def test_mase_ratio_and_invalid_denominator():
+    # MASE = MAE model / MAE naive (D10). MAE([2,0,4,10],[3,1,4,8]) = 1.0
+    a, p = [2, 0, 4, 10], [3, 1, 4, 8]
+    assert M.mase(a, p, naive_mae=2.0) == pytest.approx(0.5)
+    assert np.isnan(M.mase(a, p, naive_mae=0.0))     # denom tak valid
+    assert np.isnan(M.mase(a, p, naive_mae=None))
+
+
+def test_series_metrics_includes_mase():
+    m = M.series_metrics([0, 2, 0, 4], [0, 2, 1, 4], naive_mae=0.5)  # MAE=0.25
+    assert m["MASE"] == pytest.approx(0.5)
+
+
+def test_naive_mae_lookup_per_series():
+    df = pd.DataFrame({
+        "store": ["A", "A", "B", "B"], "brand": ["X", "X", "Y", "Y"],
+        "week_start": list(pd.to_datetime(["2025-01-06", "2025-01-13"])) * 2,
+        "y_true": [2.0, 4.0, 0.0, 0.0], "y_pred": [3.0, 3.0, 1.0, 1.0]})
+    lut = M.naive_mae_lookup(df)
+    assert lut[("A", "X")] == pytest.approx(1.0)      # mean(|2-3|,|4-3|)
+    assert lut[("B", "Y")] == pytest.approx(1.0)
+
+
 def test_smape_safe_on_zero_actual():
     # 0/0 -> 0 (tak meledak); (0,5) -> 2*5/5 = 2.0
     val = M.smape([0, 0], [0, 5])
