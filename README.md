@@ -52,7 +52,8 @@ pytest -q
 | 6e. Kandidat perbaikan akurasi (D11) | `src/models/{rf_poisson,croston,ensemble}.py` | ✅ implemented + tests hijau |
 | 7. Evaluasi + DM (4 kelompok) + MASE + verdict | `src/evaluation/` | ✅ implemented + tests hijau |
 | 8. Optimasi inventori (D8) | `src/inventory/optimize.py` | ✅ implemented + tests hijau |
-| 9. DSS dashboard | `app/dashboard.py` | ⬜ |
+| 9. DSS dashboard (Streamlit) | `app/dashboard.py` + `src/dss/recommend.py` | ✅ implemented + tests hijau |
+| Orkestrasi end-to-end | `src/run_all.py` | ✅ implemented + tests hijau |
 
 ## Catatan data (diverifikasi pada data riil)
 
@@ -132,3 +133,14 @@ pytest -q
   **akurasi ramalan yang lebih tinggi langsung menekan biaya simpan** (rasional D8). Sensitivitas
   (`inventory_sensitivity.csv`): SS naik monoton dgn service_level (3,09→3,97→5,61 pada
   0,90/0,95/0,99) & stockout turun (18→13→1); holding cost berskala linier dgn `holding_cost`.
+- **Purwarupa DSS (Tahap 9):** `app/dashboard.py` (Streamlit) menyajikan tiga subsistem —
+  Data (artefak Tahap 6–8), Model (ramalan per gerai×merek dari RF·gt), dan UI/saran
+  (kartu status warna 🟢/🟡/🔴 + rekomendasi order-up-to bahasa awam + grafik aktual-vs-ramalan
+  + input stok manual). Logika keputusan ada di `src/dss/recommend.py` (teruji); dashboard
+  hanya lapisan tampilan. **Keputusan desain (jujur):** dashboard **tidak** melatih ulang /
+  meramal live — ia menyurfacekan **prediksi walk-forward tervalidasi terakhir** (Tahap 7)
+  dgn label eksplisit minggu & tanggal *as-of* (mis. "Ramalan untuk minggu 30 Jun 2025,
+  berdasar data s.d. 23 Jun 2025"), konsisten dgn lingkup prototipe (tanpa integrasi POS
+  real-time / retraining otomatis — batasan Bab I/V). Jalankan: `streamlit run app/dashboard.py`.
+- **Reproducibility:** `python -m src.run_all --config config.yaml` menjalankan Tahap 1→8
+  berurutan (melewati artefak yang sudah ada kecuali `--force`; seed=42). Suite **137 uji hijau**.
